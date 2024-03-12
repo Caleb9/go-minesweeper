@@ -169,7 +169,7 @@ To flag a mine, add 'f' at the end
 
 Examples:
 2 2
-0 3 f`
+1 3 f`
 
 func readAndParseInput(inputScanner *bufio.Scanner) (row, col int, flag bool, err error) {
 	fmt.Print("❓ ")
