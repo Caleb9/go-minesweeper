@@ -1,0 +1,8 @@
+.devcontainer/
+.git/
+.github/
+.idea/
+Dockerfile
+README.md
+minesweeper
+*~
