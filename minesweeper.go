@@ -16,7 +16,7 @@ type Grid interface {
 	Mines() int
 	TryDefuse(row, col int) (liveAnotherDay bool, err error)
 	Flag(row, col int) error
-	Reveal() string
+	Reveal(alive bool) string
 }
 
 type field struct {
@@ -83,11 +83,13 @@ func (g grid) Flag(row, col int) error {
 	return nil
 }
 
-func (g grid) Reveal() string {
+func (g grid) Reveal(alive bool) string {
 	for row, rowFields := range g {
 		for col := range rowFields {
-			_, _ = g.TryDefuse(row, col)
-			g[row][col].IsFlagged = false
+			if g[row][col].IsMine {
+				g[row][col].IsDefused = true
+				g[row][col].IsFlagged = alive
+			}
 		}
 	}
 	return g.String()
@@ -221,14 +223,15 @@ func Game(minefield Grid) {
 			}
 			continue
 		}
-		alive, err = minefield.TryDefuse(row, col)
+		still_alive, err := minefield.TryDefuse(row, col)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
+		alive = still_alive
 		defusedFields++
 	}
-	fmt.Printf("\n%v\n", minefield.Reveal())
+	fmt.Printf("\n%v\n", minefield.Reveal(alive))
 	if alive {
 		fmt.Println("\nYOU WIN! 🥵")
 	} else {
