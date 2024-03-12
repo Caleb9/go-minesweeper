@@ -163,13 +163,13 @@ func NewMines(rows, cols, count int) []Coordinate {
 }
 
 const Help = `
-In each step, type ROW and COLUMN separated by a space
+In each step, type ROW and COLUMN, confirm with [ENTER]
 
 To flag a mine, add 'f' at the end
 
 Examples:
-2 2
-1 3 f`
+22  - defuse field in row 2 and column 2
+13f - flag field in row 1 and column 3 as mine`
 
 func readAndParseInput(inputScanner *bufio.Scanner) (row, col int, flag bool, err error) {
 	fmt.Print("❓ ")
@@ -181,17 +181,17 @@ func readAndParseInput(inputScanner *bufio.Scanner) (row, col int, flag bool, er
 		return 0, 0, false, err
 	}
 	invalidInputErr := errors.New("invalid input")
-	inputFields := strings.Split(inputScanner.Text(), " ")
-	if len(inputFields) < 2 || 3 < len(inputFields) {
+	input := inputScanner.Text()
+	if len(input) < 2 || 3 < len(input) {
 		return 0, 0, false, invalidInputErr
 	}
-	row, rowErr := strconv.Atoi(inputFields[0])
-	col, colErr := strconv.Atoi(inputFields[1])
+	row, rowErr := strconv.Atoi(input[0:1])
+	col, colErr := strconv.Atoi(input[1:2])
 	if rowErr != nil || colErr != nil {
 		return 0, 0, false, invalidInputErr
 	}
-	if len(inputFields) == 3 {
-		if inputFields[2] != "f" {
+	if len(input) == 3 {
+		if input[2] != 'f' {
 			return 0, 0, false, invalidInputErr
 		}
 		flag = true
