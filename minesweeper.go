@@ -14,14 +14,14 @@ type Grid interface {
 	Rows() int
 	Cols() int
 	Mines() int
-	TryDefuse(row, col int) (liveAnotherDay bool, err error)
-	Flag(row, col int) error
-	Reveal(alive bool) string
+	Reveal(coord Coordinate) (isStillAlive bool, err error)
+	Flag(coord Coordinate) error
+	RevealAll(isVictory bool) string
 }
 
 type field struct {
 	IsMine        bool
-	IsDefused     bool
+	IsRevealed    bool
 	AdjacentMines int
 	IsFlagged     bool
 }
@@ -29,14 +29,11 @@ type field struct {
 type grid [][]field
 
 func (g grid) Rows() int {
-	if g == nil {
-		return 0
-	}
 	return len(g)
 }
 
 func (g grid) Cols() int {
-	if g == nil || len(g) < 1 {
+	if len(g) < 1 {
 		return 0
 	}
 	return len(g[0])
@@ -54,14 +51,15 @@ func (g grid) Mines() int {
 	return mines
 }
 
-func (g grid) TryDefuse(row, col int) (liveAnotherDay bool, err error) {
+func (g grid) Reveal(coord Coordinate) (isStillAlive bool, err error) {
+	row, col := coord.row, coord.col
 	if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
 		return true, errors.New("invalid row or column")
 	}
-	if g[row][col].IsDefused {
+	if g[row][col].IsRevealed {
 		return true, errors.New("already defused")
 	}
-	g[row][col].IsDefused = true
+	g[row][col].IsRevealed = true
 	if g[row][col].IsMine {
 		return false, nil
 	}
@@ -75,7 +73,8 @@ func (g grid) TryDefuse(row, col int) (liveAnotherDay bool, err error) {
 	return true, nil
 }
 
-func (g grid) Flag(row, col int) error {
+func (g grid) Flag(coord Coordinate) error {
+	row, col := coord.row, coord.col
 	if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
 		return errors.New("invalid row or column")
 	}
@@ -83,12 +82,12 @@ func (g grid) Flag(row, col int) error {
 	return nil
 }
 
-func (g grid) Reveal(alive bool) string {
+func (g grid) RevealAll(isVictory bool) string {
 	for row, rowFields := range g {
 		for col := range rowFields {
 			if g[row][col].IsMine {
-				g[row][col].IsDefused = true
-				g[row][col].IsFlagged = alive
+				g[row][col].IsRevealed = true
+				g[row][col].IsFlagged = isVictory
 			}
 		}
 	}
@@ -99,20 +98,23 @@ func (g grid) String() string {
 	var buffer strings.Builder
 	buffer.WriteString(" ")
 	for col := range g[0] {
-		buffer.WriteString(fmt.Sprintf(" %c", rowColLabelRune(col)))
+		glyph, _ := rowColLabelGlyph(col)
+		buffer.WriteString(fmt.Sprintf(" %c", glyph))
 	}
 	buffer.WriteString("\n")
 	for row, rowFields := range g {
-		buffer.WriteString(fmt.Sprintf("%c ", rowColLabelRune(row)))
+		glyph, _ := rowColLabelGlyph(row)
+		buffer.WriteString(fmt.Sprintf("%c ", glyph))
 		for _, field := range rowFields {
 			if field.IsFlagged {
-				buffer.WriteString("🚩")
-			} else if !field.IsDefused {
-				buffer.WriteString("🍀")
+				buffer.WriteRune('🚩')
+			} else if !field.IsRevealed {
+				buffer.WriteRune('🟩')
 			} else if field.IsMine {
-				buffer.WriteString("💣")
+				buffer.WriteRune('💣')
 			} else {
-				buffer.WriteString(fmt.Sprintf("%c", adjacentMinesRune(field.AdjacentMines)))
+				glyph, _ := adjacentMinesGlyph(field.AdjacentMines)
+				buffer.WriteRune(glyph)
 			}
 		}
 		buffer.WriteRune('\n')
@@ -120,12 +122,22 @@ func (g grid) String() string {
 	return buffer.String()
 }
 
-func rowColLabelRune(num int) rune {
-	return rune(int('\u2488') + num)
+const RowMax, ColMax = 9, 9
+
+func rowColLabelGlyph(num int) (rune, error) {
+	if num < 0 || RowMax <= num || ColMax <= num {
+		return 0, errors.New("invalid num")
+	}
+	const One = int('\u2488')
+	return rune(One + num), nil
 }
 
-func adjacentMinesRune(num int) rune {
-	return rune(int('\uff10') + num)
+func adjacentMinesGlyph(num int) (rune, error) {
+	if num < 0 || RowMax <= num || ColMax <= num {
+		return 0, errors.New("invalid num")
+	}
+	const Zero = int('\uff10')
+	return rune(Zero + num), nil
 }
 
 type Coordinate struct {
@@ -133,7 +145,10 @@ type Coordinate struct {
 }
 
 func NewGrid(rows, cols int, mines []Coordinate) (Grid, error) {
-	const RowMin, RowMax, ColMin, ColMax = 3, 9, 3, 9
+	if mines == nil {
+		return nil, errors.New("invalid mines")
+	}
+	const RowMin, ColMin = 3, 3
 	if rows < RowMin || RowMax < rows || cols < ColMin || ColMax < cols {
 		return nil, errors.New("invalid grid size")
 	}
@@ -144,7 +159,7 @@ func NewGrid(rows, cols int, mines []Coordinate) (Grid, error) {
 	for _, mine := range mines {
 		row, col := mine.row, mine.col
 		if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
-			return nil, errors.New("wrong mine")
+			return nil, errors.New("invalid mine")
 		}
 		g[row][col].IsMine = true
 	}
@@ -153,8 +168,8 @@ func NewGrid(rows, cols int, mines []Coordinate) (Grid, error) {
 
 func NewMines(rows, cols, count int) []Coordinate {
 	mines := make([]Coordinate, rows*cols)
-	for row := 0; row < rows; row++ {
-		for col := 0; col < cols; col++ {
+	for row := range rows {
+		for col := range cols {
 			mines[row*cols+col] = Coordinate{row, col}
 		}
 	}
@@ -173,67 +188,67 @@ Examples:
 22  - defuse field in row 2 and column 2
 13f - flag field in row 1 and column 3 as mine`
 
-func readAndParseInput(inputScanner *bufio.Scanner) (row, col int, flag bool, err error) {
+func readAndParseInput(inputScanner *bufio.Scanner) (coord Coordinate, flag bool, err error) {
 	fmt.Print("❓ ")
 	if !inputScanner.Scan() {
 		os.Exit(0)
 	}
 	err = inputScanner.Err()
+	errCoord, invalidInputErr := Coordinate{-1, -1}, errors.New("invalid input")
 	if err != nil {
-		return 0, 0, false, err
+		return errCoord, false, err
 	}
-	invalidInputErr := errors.New("invalid input")
 	input := inputScanner.Text()
 	if len(input) < 2 || 3 < len(input) {
-		return 0, 0, false, invalidInputErr
+		return errCoord, false, invalidInputErr
 	}
 	row, rowErr := strconv.Atoi(input[0:1])
 	col, colErr := strconv.Atoi(input[1:2])
 	if rowErr != nil || colErr != nil {
-		return 0, 0, false, invalidInputErr
+		return errCoord, false, invalidInputErr
 	}
 	if len(input) == 3 {
 		if input[2] != 'f' {
-			return 0, 0, false, invalidInputErr
+			return errCoord, false, invalidInputErr
 		}
 		flag = true
 	}
 	/* Subtract 1 because rows and columns are labeled with 1-indexed sequence */
-	return row - 1, col - 1, flag, nil
+	return Coordinate{row - 1, col - 1}, flag, nil
 }
 
 func Game(minefield Grid) {
-	alive, defusedFields := true, 0
-	noMineFields := (minefield.Rows() * minefield.Cols()) - minefield.Mines()
+	isAlive, revealedFields := true, 0
+	noMineFields := minefield.Rows()*minefield.Cols() - minefield.Mines()
 	inputScanner := bufio.NewScanner(os.Stdin)
-	for alive && defusedFields < noMineFields {
+	for isAlive && revealedFields < noMineFields {
 		fmt.Println()
 		fmt.Println(minefield)
-		row, col, flag, err := readAndParseInput(inputScanner)
+		coord, flag, err := readAndParseInput(inputScanner)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Println(Help)
 			continue
 		}
 		if flag {
-			err = minefield.Flag(row, col)
+			err = minefield.Flag(coord)
 			if err != nil {
 				fmt.Println(err)
 				fmt.Println(Help)
 			}
 			continue
 		}
-		still_alive, err := minefield.TryDefuse(row, col)
+		isStillAlive, err := minefield.Reveal(coord)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
-		alive = still_alive
-		defusedFields++
+		isAlive = isStillAlive
+		revealedFields++
 	}
-	fmt.Printf("\n%v\n", minefield.Reveal(alive))
-	if alive {
-		fmt.Println("\nYOU WIN! 🥵")
+	fmt.Printf("\n%v\n", minefield.RevealAll(isAlive))
+	if isAlive {
+		fmt.Println("\n🥵 YOU WIN!")
 	} else {
 		fmt.Println("\nYOU DIE! 🪦")
 	}
