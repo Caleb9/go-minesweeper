@@ -26,22 +26,24 @@ type field struct {
 	IsFlagged     bool
 }
 
-type grid [][]field
-
-func (g grid) Rows() int {
-	return len(g)
+type grid struct {
+	fields [][]field
 }
 
-func (g grid) Cols() int {
-	if len(g) < 1 {
+func (g *grid) Rows() int {
+	return len(g.fields)
+}
+
+func (g *grid) Cols() int {
+	if len(g.fields) < 1 {
 		return 0
 	}
-	return len(g[0])
+	return len(g.fields[0])
 }
 
-func (g grid) Mines() int {
+func (g *grid) Mines() int {
 	mines := 0
-	for _, rowFields := range g {
+	for _, rowFields := range g.fields {
 		for _, field := range rowFields {
 			if field.IsMine {
 				mines++
@@ -51,58 +53,58 @@ func (g grid) Mines() int {
 	return mines
 }
 
-func (g grid) Reveal(coord Coordinate) (isStillAlive bool, err error) {
+func (g *grid) Reveal(coord Coordinate) (isStillAlive bool, err error) {
 	row, col := coord.row, coord.col
 	if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
 		return true, errors.New("invalid row or column")
 	}
-	if g[row][col].IsRevealed {
+	if g.fields[row][col].IsRevealed {
 		return true, errors.New("already defused")
 	}
-	g[row][col].IsRevealed = true
-	if g[row][col].IsMine {
+	g.fields[row][col].IsRevealed = true
+	if g.fields[row][col].IsMine {
 		return false, nil
 	}
-	for _, gridRow := range g[max(row-1, 0):min(row+2, len(g))] {
+	for _, gridRow := range g.fields[max(row-1, 0):min(row+2, len(g.fields))] {
 		for _, field := range gridRow[max(col-1, 0):min(col+2, len(gridRow))] {
 			if field.IsMine {
-				g[row][col].AdjacentMines++
+				g.fields[row][col].AdjacentMines++
 			}
 		}
 	}
 	return true, nil
 }
 
-func (g grid) Flag(coord Coordinate) error {
+func (g *grid) Flag(coord Coordinate) error {
 	row, col := coord.row, coord.col
 	if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
 		return errors.New("invalid row or column")
 	}
-	g[row][col].IsFlagged = !g[row][col].IsFlagged
+	g.fields[row][col].IsFlagged = !g.fields[row][col].IsFlagged
 	return nil
 }
 
-func (g grid) RevealAll(isVictory bool) string {
-	for row, rowFields := range g {
-		for col := range rowFields {
-			if g[row][col].IsMine {
-				g[row][col].IsRevealed = true
-				g[row][col].IsFlagged = isVictory
+func (g *grid) RevealAll(isVictory bool) string {
+	for _, rowFields := range g.fields {
+		for _, field := range rowFields {
+			if field.IsMine {
+				field.IsRevealed = true
+				field.IsFlagged = isVictory
 			}
 		}
 	}
 	return g.String()
 }
 
-func (g grid) String() string {
+func (g *grid) String() string {
 	var buffer strings.Builder
 	buffer.WriteString(" ")
-	for col := range g[0] {
+	for col := range g.fields[0] {
 		glyph, _ := rowColLabelGlyph(col)
 		buffer.WriteString(fmt.Sprintf(" %c", glyph))
 	}
 	buffer.WriteString("\n")
-	for row, rowFields := range g {
+	for row, rowFields := range g.fields {
 		glyph, _ := rowColLabelGlyph(row)
 		buffer.WriteString(fmt.Sprintf("%c ", glyph))
 		for _, field := range rowFields {
@@ -122,7 +124,10 @@ func (g grid) String() string {
 	return buffer.String()
 }
 
-const RowMax, ColMax = 9, 9
+const (
+	ColMax = 9
+	RowMax = 9
+)
 
 func rowColLabelGlyph(num int) (rune, error) {
 	if num < 0 || RowMax <= num || ColMax <= num {
@@ -145,25 +150,22 @@ type Coordinate struct {
 }
 
 func NewGrid(rows, cols int, mines []Coordinate) (Grid, error) {
-	if mines == nil {
-		return nil, errors.New("invalid mines")
-	}
 	const RowMin, ColMin = 3, 3
 	if rows < RowMin || RowMax < rows || cols < ColMin || ColMax < cols {
 		return nil, errors.New("invalid grid size")
 	}
-	g := make(grid, rows)
+	g := grid{make([][]field, rows)}
 	for i := 0; i < rows; i++ {
-		g[i] = make([]field, cols)
+		g.fields[i] = make([]field, cols)
 	}
 	for _, mine := range mines {
 		row, col := mine.row, mine.col
 		if row < 0 || g.Rows() <= row || col < 0 || g.Cols() <= col {
 			return nil, errors.New("invalid mine")
 		}
-		g[row][col].IsMine = true
+		g.fields[row][col].IsMine = true
 	}
-	return g, nil
+	return Grid(&g), nil
 }
 
 func NewMines(rows, cols, count int) []Coordinate {
