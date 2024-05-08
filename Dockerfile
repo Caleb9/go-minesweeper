@@ -1,10 +1,10 @@
 FROM golang AS build
 
 WORKDIR /build
-COPY ./go.mod ./minesweeper.go ./
+COPY ./ ./
 RUN go build
 
 FROM scratch AS final
-COPY --from=build /build/minesweeper ./
+COPY --from=build /build/go-minesweeper ./
 
-CMD ["./minesweeper"]
+CMD ["./go-minesweeper"]
